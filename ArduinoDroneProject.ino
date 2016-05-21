@@ -1,5 +1,5 @@
 //Author : Prokuma
-
+//License : MIT License
 #include <Wire.h>
 
 //angle Struct
@@ -34,13 +34,15 @@ typedef struct PIDresult PIDResult;
 const int MPU_addr = 0x68;
 const double Pi = 3.1415926535;
 const double GYROXYZ_TO_DEGREES_PER_SEC = 131;
-double prevTime_PID = 0; //Saving previous time for PID Control
 
 //PID Control Constants
 double Kp; //P control
 double Ki; //I control
 double Kd; //D control
 
+/* readAngle()
+ * Read Angle to MPU6050
+ */
 SensorResult* readAngle(){
   Wire.beginTransmission(MPU_addr);
   Wire.write(0x3B);
@@ -136,17 +138,37 @@ void calcGyroAngle(SensorResult *sensor, SensorResult *basedSensorResult,Angle* 
   (*result).yaw += gyro.GyZ * dt;
 }
 
+/* calcFilteredAngle
+ * Calculate Combination Angle Filter Funtion
+ * Angle* accel : accelorator Angle
+ * Angle* gyro : gyroscope Angle
+ * Angle* result : Result Angle
+ * double dt : Time increment
+ */
+void calcFilteredAngle(Angle* accel, Angle* gyro, Angle* result, double dt){
+  const double ALPHA = 0.96;
+  Angle tmp;
+
+  tmp.roll = (*result).roll + (*gyro).roll * dt;
+  tmp.pitch = (*result).pitch + (*gyro).pitch * dt;
+  tmp.yaw = (*result).yaw + (*gyro).yaw * dt;
+
+  (*result).roll = ALPHA * tmp.roll + (1.0 - ALPHA) * (*accel).roll;
+  (*result).pitch = ALPHA * tmp.pitch + (1.0 - ALPHA) * (*accel).pitch;
+  (*result).yaw = tmp.yaw;
+}
+
 /* PID_Calculate
  * PID Control Calculation Function
  * Parameter:aimAnlge, prevAngle, currentAngle
  * aimAngle(Angle *):set aim angle
  * prevAngle(Angle *):set previous current angle
  * currentAngle(Angle *):set current angle
+ * double dt : Time increment
  */
-PIDResult* PID_Calculate(Angle *aimAngle, Angle *prevAngle ,Angle *currentAngle) {
+PIDResult* PID_Calculate(Angle *aimAngle, Angle *prevAngle ,Angle *currentAngle, double dt) {
 
   double currentTime = millis();
-  double dTime = currentTime - prevTime_PID;
   
   Error error;
   error.roll = (*aimAngle).roll - (*currentAngle).roll;
@@ -158,8 +180,8 @@ PIDResult* PID_Calculate(Angle *aimAngle, Angle *prevAngle ,Angle *currentAngle)
   P_control.pitch = Kp * error.pitch;
   P_control.yaw = Kp * error.yaw;
   
-  I_control.roll = Ki * error.roll * dTime;
-  I_control.pitch = Ki * error.pitch * dTime;
+  I_control.roll = Ki * error.roll * dt;
+  I_control.pitch = Ki * error.pitch * dt;
   I_control.yaw = Ki * error.yaw * dTime;
 
   Angle dAngle;
@@ -167,9 +189,9 @@ PIDResult* PID_Calculate(Angle *aimAngle, Angle *prevAngle ,Angle *currentAngle)
   dAngle.pitch = (*currentAngle).pitch - (*prevAngle).pitch;
   dAngle.yaw = (*currentAngle).yaw - (*prevAngle).yaw;
   
-  D_control.roll = - Kd * (dAngle.roll/dTime);
-  D_control.pitch = - Kd * (dAngle.pitch/dTime);
-  D_control.yaw = - Kd * (dAngle.yaw/dTime);
+  D_control.roll = - Kd * (dAngle.roll/dt);
+  D_control.pitch = - Kd * (dAngle.pitch/dt);
+  D_control.yaw = - Kd * (dAngle.yaw/dt);
 
   PIDResult result;
   result.control.roll = P_control.roll + I_control.roll + D_control.roll;
@@ -187,21 +209,47 @@ void Motor_Control(Angle PID_value, double throttle){
 }
 
 SensorResult basedSensorValue;
+Angle prevAngle;
+double prevTime = 0;
+int loopCount = 0;
 
 void setup() {
-  //init
+  //Initialize
   initMPU6050();
   Serial.begin(115200);
   basedSensorValue = *calibAngle();
+  prevAngle.roll = 0;
+  prevAngle.pitch = 0;
+  prevAngle.yaw = 0;
 }
 
 void loop() {
   /* Flow of loop
-   * 1.Get angle
-   * 2.Get acceleration
-   * 3.Get aim value to controller
-   * 4.PID control calculation
-   * 5.throttle calculation
-   * 6.Control to motor
+   * 1.Get aim angle to controller
+   * 2.Get Angle
+   * 3.PID control calculation
+   * 4.throttle calculation
+   * 5.Control to motor
    */
+   //calculation of increment time
+   double currentTime = millis();
+   double dt = currentTime - prevTime;
+
+   //2.Get Angle
+   SensorResult* sensorValue = readAngle();
+   Angle* accelAngle = calcAccelAngle(sensorValue, &basedSensorValue);
+   Angle* gyroAngle;
+   calcGyroAngle(sensorValue, &basedSensorValue, gyroAngle, dt);
+   Angle* currentAngle;
+   if(loopCount == 0){ //If excute first loop
+    *currentAngle = prevAngle;
+   }
+   calcFilteredAngle(accelAngle, gyroAngle, currentAngle, dt);
+
+   //3.PID control calculation
+   PIDResult* pidResult = PID_Calculate(aimAngle, &prevAngle, currentAngle, dt);
+
+   //set previous value
+   prevTime = currentTime;
+   prevAngle = *currentAngle;
 }

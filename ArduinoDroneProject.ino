@@ -250,6 +250,6 @@ void loop() {
    PIDResult* pidResult = PID_Calculate(aimAngle, &prevAngle, currentAngle, dt);
 
    //set previous value
-   prevTime = currentTime;
+   prevTime = *currentTime;
    prevAngle = *currentAngle;
 }

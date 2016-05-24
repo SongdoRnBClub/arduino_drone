@@ -246,19 +246,20 @@ Control* getControllerValue(){
  */
 void MotorControl(Angle* PID_value, double throttle){
   if(throttle == 0){ //IF IDLE STATE
-    analogWrite(MOTOR_A_PORT, 0);
-    analogWrite(MOTOR_B_PORT, 0);
-    analogWrite(MOTOR_C_PORT, 0);
-    analogWrite(MOTOR_D_PORT, 0);
+    analogWrite(MOTOR_A_PIN, 0);
+    analogWrite(MOTOR_B_PIN, 0);
+    analogWrite(MOTOR_C_PIN, 0);
+    analogWrite(MOTOR_D_PIN, 0);
   }else{
     double motorASpeed = throttle + (*PID_value).yaw + (*PID_value).roll + (*PID_value).pitch;
+    double motorBSpeed = throttle - (*PID_value).yaw - (*PID_value).roll + (*PID_value).pitch;
     double motorCSpeed = throttle + (*PID_value).yaw - (*PID_value).roll - (*PID_value).pitch;
     double motorDSpeed = throttle - (*PID_value).yaw + (*PID_value).roll - (*PID_value).pitch;
 
-    analogWrite(MOTOR_A_PORT, constrain(motorASpeed , 0, 255));
-    analogWrite(MOTOR_B_PORT, constrain(motorBSpeed , 0, 255));
-    analogWrite(MOTOR_C_PORT, constrain(motorCSpeed , 0, 255));
-    analogWrite(MOTOR_D_PORT, constrain(motorDSpeed , 0, 255));
+    analogWrite(MOTOR_A_PIN, constrain(motorASpeed , 0, 255));
+    analogWrite(MOTOR_B_PIN, constrain(motorBSpeed , 0, 255));
+    analogWrite(MOTOR_C_PIN, constrain(motorCSpeed , 0, 255));
+    analogWrite(MOTOR_D_PIN, constrain(motorDSpeed , 0, 255));
   }
 }
 
@@ -292,7 +293,7 @@ void loop() {
 
    //1.Get aim angle to controller
    if(Serial1.available() > 0){
-    Control* result = getControllterValue();
+    Control* result = getControllerValue();
     aimAngle = (*result).aimAngle;
     throttle = (*result).throttle;
    }
@@ -312,7 +313,7 @@ void loop() {
    PIDResult* pidResult = PID_Calculate(&aimAngle, &prevAngle, currentAngle, dt);
 
    //4.Control to Motor
-   MotorControl(pidResult, throttle);
+   MotorControl(&((*pidResult).control), throttle);
    //set previous value
    prevTime = currentTime;
    prevAngle = *currentAngle;

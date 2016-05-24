@@ -1,6 +1,10 @@
 //Author : Prokuma
 //License : MIT License
 #include <Wire.h>
+#define MOTOR_A_PIN 6
+#define MOTOR_B_PIN 10
+#define MOTOR_C_PIN 9
+#define MOTOR_D_PIN 5
 
 //angle Struct
 struct angle {
@@ -29,16 +33,22 @@ struct PIDresult {
   Error error;
 };
 
+struct control {
+  Angle aimAngle;
+  double throttle;
+};
+
 typedef struct PIDresult PIDResult;
+typedef struct control Control;
 
 const int MPU_addr = 0x68;
 const double Pi = 3.1415926535;
 const double GYROXYZ_TO_DEGREES_PER_SEC = 131;
 
 //PID Control Constants
-double Kp; //P control
-double Ki; //I control
-double Kd; //D control
+double Kp = 0.6; //P control
+double Ki = 0.6; //I control
+double Kd = 0.3; //D control
 
 /* readAngle()
  * Read Angle to MPU6050
@@ -182,7 +192,7 @@ PIDResult* PID_Calculate(Angle *aimAngle, Angle *prevAngle ,Angle *currentAngle,
   
   I_control.roll = Ki * error.roll * dt;
   I_control.pitch = Ki * error.pitch * dt;
-  I_control.yaw = Ki * error.yaw * dTime;
+  I_control.yaw = Ki * error.yaw * dt;
 
   Angle dAngle;
   dAngle.roll = (*currentAngle).roll - (*prevAngle).roll;
@@ -199,24 +209,70 @@ PIDResult* PID_Calculate(Angle *aimAngle, Angle *prevAngle ,Angle *currentAngle,
   result.control.yaw = P_control.yaw + I_control.yaw + D_control.yaw;
 
   result.error = error;
-
-  prevTime_PID = millis();
   return &result;
 }
 
-void Motor_Control(Angle PID_value, double throttle){
-  //
+/* getControllerValue
+ * Get aim to controller
+ */
+Control* getControllerValue(){
+  Control result;
+  while(Serial1.available() > 0){
+    char userInput = Serial1.read();
+    switch(userInput){
+      case 'T':
+        result.throttle = Serial1.read();
+        break;
+      case 'R':
+        result.aimAngle.roll = Serial1.read();
+        break;
+      case 'P':
+        result.aimAngle.pitch = Serial1.read();
+        break;
+      case 'Y':
+        result.aimAngle.yaw = Serial1.read();
+        break;
+      default:
+        Serial1.println("Waiting for control");
+    }
+  }
+  return &result;
+}
+
+/* MotorControl
+ * Control to Motor
+ * Angle* PID_value : Calculated PID value
+ * double throttle : throttle value
+ */
+void MotorControl(Angle* PID_value, double throttle){
+  if(throttle == 0){ //IF IDLE STATE
+    analogWrite(MOTOR_A_PORT, 0);
+    analogWrite(MOTOR_B_PORT, 0);
+    analogWrite(MOTOR_C_PORT, 0);
+    analogWrite(MOTOR_D_PORT, 0);
+  }else{
+    double motorASpeed = throttle + (*PID_value).yaw + (*PID_value).roll + (*PID_value).pitch;
+    double motorCSpeed = throttle + (*PID_value).yaw - (*PID_value).roll - (*PID_value).pitch;
+    double motorDSpeed = throttle - (*PID_value).yaw + (*PID_value).roll - (*PID_value).pitch;
+
+    analogWrite(MOTOR_A_PORT, constrain(motorASpeed , 0, 255));
+    analogWrite(MOTOR_B_PORT, constrain(motorBSpeed , 0, 255));
+    analogWrite(MOTOR_C_PORT, constrain(motorCSpeed , 0, 255));
+    analogWrite(MOTOR_D_PORT, constrain(motorDSpeed , 0, 255));
+  }
 }
 
 SensorResult basedSensorValue;
+Angle aimAngle;
 Angle prevAngle;
+double throttle;
 double prevTime = 0;
 int loopCount = 0;
 
 void setup() {
   //Initialize
   initMPU6050();
-  Serial.begin(115200);
+  Serial1.begin(115200);
   basedSensorValue = *calibAngle();
   prevAngle.roll = 0;
   prevAngle.pitch = 0;
@@ -228,13 +284,19 @@ void loop() {
    * 1.Get aim angle to controller
    * 2.Get Angle
    * 3.PID control calculation
-   * 4.throttle calculation
-   * 5.Control to motor
+   * 4.Control to motor
    */
    //calculation of increment time
    double currentTime = millis();
    double dt = currentTime - prevTime;
 
+   //1.Get aim angle to controller
+   if(Serial1.available() > 0){
+    Control* result = getControllterValue();
+    aimAngle = (*result).aimAngle;
+    throttle = (*result).throttle;
+   }
+   
    //2.Get Angle
    SensorResult* sensorValue = readAngle();
    Angle* accelAngle = calcAccelAngle(sensorValue, &basedSensorValue);
@@ -247,9 +309,11 @@ void loop() {
    calcFilteredAngle(accelAngle, gyroAngle, currentAngle, dt);
 
    //3.PID control calculation
-   PIDResult* pidResult = PID_Calculate(aimAngle, &prevAngle, currentAngle, dt);
+   PIDResult* pidResult = PID_Calculate(&aimAngle, &prevAngle, currentAngle, dt);
 
+   //4.Control to Motor
+   MotorControl(pidResult, throttle);
    //set previous value
-   prevTime = *currentTime;
+   prevTime = currentTime;
    prevAngle = *currentAngle;
 }

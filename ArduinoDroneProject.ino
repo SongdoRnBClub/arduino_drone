@@ -266,7 +266,7 @@ void MotorControl(Angle* PID_value, double throttle){
 SensorResult basedSensorValue;
 Angle aimAngle;
 Angle prevAngle;
-double throttle;
+double throttle = 0;
 double prevTime = 0;
 int loopCount = 0;
 
@@ -275,6 +275,9 @@ void setup() {
   initMPU6050();
   Serial1.begin(115200);
   basedSensorValue = *calibAngle();
+  aimAngle.roll = 0;
+  aimAngle.pitch = 0;
+  aimAngle.yaw = 0;
   prevAngle.roll = 0;
   prevAngle.pitch = 0;
   prevAngle.yaw = 0;

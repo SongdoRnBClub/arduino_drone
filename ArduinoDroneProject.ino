@@ -217,24 +217,33 @@ PIDResult* PID_Calculate(Angle *aimAngle, Angle *prevAngle ,Angle *currentAngle,
  */
 Control* getControllerValue(){
   Control result;
+  bool isReturnedValue;
   while(Serial1.available() > 0){
     char userInput = Serial1.read();
     switch(userInput){
       case 'T':
         result.throttle = Serial1.read();
+        isReturnedValue = true;
         break;
       case 'R':
         result.aimAngle.roll = Serial1.read();
+        isReturnedValue = true;
         break;
       case 'P':
         result.aimAngle.pitch = Serial1.read();
+        isReturnedValue = true;
         break;
       case 'Y':
         result.aimAngle.yaw = Serial1.read();
+        isReturnedValue = true;
         break;
-      default:
-        Serial1.println("Waiting for control");
     }
+  }
+  if(!isReturnedValue){
+    result.throttle = 0;
+    result.aimAngle.roll = 0;
+    result.aimAngle.pitch = 0;
+    result.aimAngle.yaw = 0;
   }
   return &result;
 }
@@ -256,17 +265,17 @@ void MotorControl(Angle* PID_value, double throttle){
     double motorCSpeed = throttle + (*PID_value).yaw - (*PID_value).roll - (*PID_value).pitch;
     double motorDSpeed = throttle - (*PID_value).yaw + (*PID_value).roll - (*PID_value).pitch;
 
-    analogWrite(MOTOR_A_PIN, constrain(motorASpeed , 0, 255));
-    analogWrite(MOTOR_B_PIN, constrain(motorBSpeed , 0, 255));
-    analogWrite(MOTOR_C_PIN, constrain(motorCSpeed , 0, 255));
-    analogWrite(MOTOR_D_PIN, constrain(motorDSpeed , 0, 255));
+    analogWrite(MOTOR_A_PIN, constrain((int)motorASpeed , 0, 255));
+    analogWrite(MOTOR_B_PIN, constrain((int)motorBSpeed , 0, 255));
+    analogWrite(MOTOR_C_PIN, constrain((int)motorCSpeed , 0, 255));
+    analogWrite(MOTOR_D_PIN, constrain((int)motorDSpeed , 0, 255));
   }
 }
 
 SensorResult basedSensorValue;
 Angle aimAngle;
 Angle prevAngle;
-double throttle = 0;
+double throttleInput = 0;
 double prevTime = 0;
 int loopCount = 0;
 
@@ -296,9 +305,15 @@ void loop() {
 
    //1.Get aim angle to controller
    if(Serial1.available() > 0){
-    Control* result = getControllerValue();
-    aimAngle = (*result).aimAngle;
-    throttle = (*result).throttle;
+    if(loopCount == 0){
+      while(Serial1.available()>0){
+        char userInput = Serial1.read();
+      }
+    }else{
+      Control* result = getControllerValue();
+      aimAngle = (*result).aimAngle;
+      throttleInput = (*result).throttle;
+    }
    }
    
    //2.Get Angle
@@ -316,8 +331,9 @@ void loop() {
    PIDResult* pidResult = PID_Calculate(&aimAngle, &prevAngle, currentAngle, dt);
 
    //4.Control to Motor
-   MotorControl(&((*pidResult).control), throttle);
+   MotorControl(&((*pidResult).control), throttleInput);
    //set previous value
    prevTime = currentTime;
    prevAngle = *currentAngle;
+   loopCount++;
 }

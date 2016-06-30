@@ -25,7 +25,7 @@
 
 2016/05/29 Alpha v.1.0 릴리즈
 
-링크:![https://github.com/Prokuma/ardino_drone_controller](https://github.com/Prokuma/ardino_drone_controller)
+링크:[https://github.com/Prokuma/ardino_drone_controller](https://github.com/Prokuma/ardino_drone_controller)
 
 ## 프로토콜 규격(Prokuma Drone Control Protocol v1)
 

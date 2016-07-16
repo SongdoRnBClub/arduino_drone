@@ -77,7 +77,7 @@ SensorResult* readAngle(){
 void initMPU6050(){
   Wire.begin();
   Wire.beginTransmission(MPU_addr);
-  Wire.write(0x68);
+  Wire.write(0x6B);
   Wire.write(0);
   Wire.endTransmission(true);
 }
@@ -114,20 +114,17 @@ SensorResult* calibAngle(){
  * SensorResult* sensor : Current Sensor Value
  * SensorResult* basedSenserResult : Based Sensor Value
  */
-Angle* calcAccelAngle(SensorResult* sensor, SensorResult* basedSensorResult){
+void calcAccelAngle(SensorResult* sensor, SensorResult* basedSensorResult, Angle* result){
   SensorResult accel;
 
   accel.AcX = (*sensor).AcX - (*basedSensorResult).AcX;
   accel.AcY = (*sensor).AcX - (*basedSensorResult).AcY;
   accel.AcZ = (*sensor).AcZ + (16384 - (*basedSensorResult).AcZ);
 
-  Angle result;
+  (*result).roll = atan(accel.AcY/sqrt(pow(accel.AcX, 2) + pow(accel.AcZ, 2))) * (180/Pi);
+  (*result).pitch = atan(-accel.AcX/sqrt(pow(accel.AcY, 2) + pow(accel.AcZ, 2))) * (180/Pi);
+  (*result).yaw = 0;
 
-  result.roll = atan(accel.AcY/sqrt(pow(accel.AcX, 2) + pow(accel.AcZ, 2))) * (180/Pi);
-  result.pitch = atan(-accel.AcX/sqrt(pow(accel.AcY, 2) + pow(accel.AcZ, 2))) * (180/Pi);
-  result.yaw = 0;
-
-  return &result;
 }
 
 /* calcGyroAngle
@@ -136,16 +133,17 @@ Angle* calcAccelAngle(SensorResult* sensor, SensorResult* basedSensorResult){
  * Angle* result : Result Angle
  * double dt : Time increment
  */
-void calcGyroAngle(SensorResult *sensor, SensorResult *basedSensorResult,Angle* result, double dt){
-  SensorResult gyro;
+void calcGyroAngle(SensorResult *sensor, SensorResult *basedSensorResult,Angle* result,SensorResult* dGyro, double dt){
+  //SensorResult gyro;
 
-  gyro.GyX = ((*sensor).GyX - (*basedSensorResult).GyX) / GYROXYZ_TO_DEGREES_PER_SEC;
-  gyro.GyY = ((*sensor).GyY - (*basedSensorResult).GyY) / GYROXYZ_TO_DEGREES_PER_SEC;
-  gyro.GyZ = ((*sensor).GyZ - (*basedSensorResult).GyZ) / GYROXYZ_TO_DEGREES_PER_SEC;
+  (*dGyro).GyX = ((*sensor).GyX - (*basedSensorResult).GyX) / GYROXYZ_TO_DEGREES_PER_SEC;
+  (*dGyro).GyY = ((*sensor).GyY - (*basedSensorResult).GyY) / GYROXYZ_TO_DEGREES_PER_SEC;
+  (*dGyro).GyZ = ((*sensor).GyZ - (*basedSensorResult).GyZ) / GYROXYZ_TO_DEGREES_PER_SEC;
 
-  (*result).roll += gyro.GyX * dt;
-  (*result).pitch += gyro.GyY * dt;
-  (*result).yaw += gyro.GyZ * dt;
+  (*result).roll = (*result).roll + ((*dGyro).GyX * dt);
+  (*result).pitch = (*result).pitch + ((*dGyro).GyY * dt);
+  (*result).yaw = (*result).yaw + ((*dGyro).GyZ * dt);
+
 }
 
 /* calcFilteredAngle
@@ -155,16 +153,16 @@ void calcGyroAngle(SensorResult *sensor, SensorResult *basedSensorResult,Angle* 
  * Angle* result : Result Angle
  * double dt : Time increment
  */
-void calcFilteredAngle(Angle* accel, Angle* gyro, Angle* result, double dt){
+void calcFilteredAngle(Angle* accel, SensorResult* gyro, Angle* result, double dt){
   const double ALPHA = 0.96;
   Angle tmp;
 
-  tmp.roll = (*result).roll + (*gyro).roll * dt;
-  tmp.pitch = (*result).pitch + (*gyro).pitch * dt;
-  tmp.yaw = (*result).yaw + (*gyro).yaw * dt;
+  tmp.roll = (*result).roll + ((*gyro).GyX * dt);
+  tmp.pitch = (*result).pitch + ((*gyro).GyY * dt);
+  tmp.yaw = (*result).yaw + ((*gyro).GyZ * dt);
 
-  (*result).roll = ALPHA * tmp.roll + (1.0 - ALPHA) * (*accel).roll;
-  (*result).pitch = ALPHA * tmp.pitch + (1.0 - ALPHA) * (*accel).pitch;
+  (*result).roll = (ALPHA * tmp.roll) + ((1.0 - ALPHA) * (*accel).roll);
+  (*result).pitch = (ALPHA * tmp.pitch) + ((1.0 - ALPHA) * (*accel).pitch);
   (*result).yaw = tmp.yaw;
 }
 
@@ -176,9 +174,7 @@ void calcFilteredAngle(Angle* accel, Angle* gyro, Angle* result, double dt){
  * currentAngle(Angle *):set current angle
  * double dt : Time increment
  */
-PIDResult* PID_Calculate(Angle *aimAngle, Angle *prevAngle ,Angle *currentAngle, double dt) {
-
-  double currentTime = millis();
+void PID_Calculate(Angle *aimAngle, Angle *prevAngle ,Angle *currentAngle, double dt, PIDResult* result) {
   
   Error error;
   error.roll = (*aimAngle).roll - (*currentAngle).roll;
@@ -202,14 +198,12 @@ PIDResult* PID_Calculate(Angle *aimAngle, Angle *prevAngle ,Angle *currentAngle,
   D_control.roll = - Kd * (dAngle.roll/dt);
   D_control.pitch = - Kd * (dAngle.pitch/dt);
   D_control.yaw = - Kd * (dAngle.yaw/dt);
+  
+  (*result).control.roll = P_control.roll + I_control.roll + D_control.roll;
+  (*result).control.pitch = P_control.pitch + I_control.pitch + D_control.pitch;
+  (*result).control.yaw = P_control.yaw + I_control.yaw + D_control.yaw;
 
-  PIDResult result;
-  result.control.roll = P_control.roll + I_control.roll + D_control.roll;
-  result.control.pitch = P_control.pitch + I_control.pitch + D_control.pitch;
-  result.control.yaw = P_control.yaw + I_control.yaw + D_control.yaw;
-
-  result.error = error;
-  return &result;
+  (*result).error = error;
 }
 
 /* getControllerValue
@@ -217,24 +211,24 @@ PIDResult* PID_Calculate(Angle *aimAngle, Angle *prevAngle ,Angle *currentAngle,
  */
 Control* getControllerValue(){
   Control result;
-  bool isReturnedValue;
+  bool isReturnedValue = false;
   while(Serial1.available() > 0){
     char userInput = Serial1.read();
     switch(userInput){
       case 'T':
-        result.throttle = Serial1.read();
+        result.throttle = (int)Serial1.read();
         isReturnedValue = true;
         break;
       case 'R':
-        result.aimAngle.roll = Serial1.read();
+        result.aimAngle.roll = (double)Serial1.read() - 50;
         isReturnedValue = true;
         break;
       case 'P':
-        result.aimAngle.pitch = Serial1.read();
+        result.aimAngle.pitch = (double)Serial1.read() - 50;
         isReturnedValue = true;
         break;
       case 'Y':
-        result.aimAngle.yaw = Serial1.read();
+        result.aimAngle.yaw = (double)Serial1.read() - 50;
         isReturnedValue = true;
         break;
     }
@@ -272,10 +266,29 @@ void MotorControl(Angle* PID_value, double throttle){
   }
 }
 
+void initAngle(Angle* angle){
+  (*angle).roll = 0;
+  (*angle).pitch = 0;
+  (*angle).yaw = 0;
+}
+
+void initSensor(SensorResult* sensor){
+  (*sensor).AcX = 0;
+  (*sensor).AcY = 0;
+  (*sensor).AcZ = 0;
+  (*sensor).GyX = 0;
+  (*sensor).GyY = 0;
+  (*sensor).GyZ = 0;
+}
+
 SensorResult basedSensorValue;
 Angle aimAngle;
 Angle prevAngle;
-double throttleInput = 0;
+Angle gyroAngle;
+Angle accelAngle;
+Angle currentAngle;
+SensorResult dGyro;
+int throttleInput = 0;
 double prevTime = 0;
 int loopCount = 0;
 
@@ -283,13 +296,14 @@ void setup() {
   //Initialize
   initMPU6050();
   Serial1.begin(115200);
+  initSensor(&basedSensorValue);
   basedSensorValue = *calibAngle();
-  aimAngle.roll = 0;
-  aimAngle.pitch = 0;
-  aimAngle.yaw = 0;
-  prevAngle.roll = 0;
-  prevAngle.pitch = 0;
-  prevAngle.yaw = 0;
+  initAngle(&aimAngle);
+  initAngle(&prevAngle);
+  initAngle(&gyroAngle);
+  initAngle(&accelAngle);
+  initAngle(&currentAngle);
+  initSensor(&dGyro);
 }
 
 void loop() {
@@ -299,41 +313,35 @@ void loop() {
    * 3.PID control calculation
    * 4.Control to motor
    */
-   //calculation of increment time
    double currentTime = millis();
-   double dt = currentTime - prevTime;
+   double dt = (currentTime - prevTime) / 1000;
 
    //1.Get aim angle to controller
    if(Serial1.available() > 0){
-    if(loopCount == 0){
-      while(Serial1.available()>0){
-        char userInput = Serial1.read();
-      }
-    }else{
       Control* result = getControllerValue();
       aimAngle = (*result).aimAngle;
       throttleInput = (*result).throttle;
-    }
    }
    
    //2.Get Angle
    SensorResult* sensorValue = readAngle();
-   Angle* accelAngle = calcAccelAngle(sensorValue, &basedSensorValue);
-   Angle* gyroAngle;
-   calcGyroAngle(sensorValue, &basedSensorValue, gyroAngle, dt);
-   Angle* currentAngle;
+
+   //calculation of increment time
+   calcAccelAngle(sensorValue, &basedSensorValue, &accelAngle);
+   calcGyroAngle(sensorValue, &basedSensorValue, &gyroAngle, &dGyro, dt);
    if(loopCount == 0){ //If excute first loop
-    *currentAngle = prevAngle;
+     currentAngle = prevAngle;
    }
-   calcFilteredAngle(accelAngle, gyroAngle, currentAngle, dt);
+   calcFilteredAngle(&accelAngle, &dGyro, &currentAngle, dt);
 
    //3.PID control calculation
-   PIDResult* pidResult = PID_Calculate(&aimAngle, &prevAngle, currentAngle, dt);
-
+   PIDResult pidResult;
+   PID_Calculate(&aimAngle, &prevAngle, &currentAngle, dt, &pidResult);
+  
    //4.Control to Motor
-   MotorControl(&((*pidResult).control), throttleInput);
+   MotorControl(&(pidResult.control), (double)throttleInput);
    //set previous value
    prevTime = currentTime;
-   prevAngle = *currentAngle;
+   prevAngle = currentAngle;
    loopCount++;
 }

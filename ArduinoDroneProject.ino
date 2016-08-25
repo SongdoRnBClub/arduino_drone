@@ -168,27 +168,29 @@ void calcFilteredAngle(Angle* accel, SensorResult* gyro, Angle* result, double d
 
 /* PID_Calculate
  * PID Control Calculation Function
- * Parameter:aimAnlge, prevAngle, currentAngle
+ * Parameter:aimAnlge, prevAngle, currentAngle, dt, prev_I_controll, result
  * aimAngle(Angle *):set aim angle
  * prevAngle(Angle *):set previous current angle
  * currentAngle(Angle *):set current angle
  * double dt : Time increment
+ * prev_I_control(Angle *) : Previous Integral Calculated Number
+ * result(PIDResult *) : Result of PID Calculation
  */
-void PID_Calculate(Angle *aimAngle, Angle *prevAngle ,Angle *currentAngle, double dt, PIDResult* result) {
+void PID_Calculate(Angle *aimAngle, Angle *prevAngle ,Angle *currentAngle, double dt, Angle *prev_I_control, PIDResult* result) {
   
   Error error;
   error.roll = (*aimAngle).roll - (*currentAngle).roll;
   error.pitch = (*aimAngle).pitch - (*currentAngle).pitch;
   error.yaw = (*aimAngle).yaw - (*currentAngle).yaw;
 
-  Angle P_control, I_control, D_control;
+  Angle P_control, D_control;
   P_control.roll = Kp * error.roll;
   P_control.pitch = Kp * error.pitch;
   P_control.yaw = Kp * error.yaw;
   
-  I_control.roll = Ki * error.roll * dt;
-  I_control.pitch = Ki * error.pitch * dt;
-  I_control.yaw = Ki * error.yaw * dt;
+  prev_I_control->roll += Ki * error.roll * dt;
+  prev_I_control->pitch += Ki * error.pitch * dt;
+  prev_I_control->yaw += Ki * error.yaw * dt;
 
   Angle dAngle;
   dAngle.roll = (*currentAngle).roll - (*prevAngle).roll;
@@ -199,11 +201,59 @@ void PID_Calculate(Angle *aimAngle, Angle *prevAngle ,Angle *currentAngle, doubl
   D_control.pitch = - Kd * (dAngle.pitch/dt);
   D_control.yaw = - Kd * (dAngle.yaw/dt);
   
-  (*result).control.roll = P_control.roll + I_control.roll + D_control.roll;
-  (*result).control.pitch = P_control.pitch + I_control.pitch + D_control.pitch;
-  (*result).control.yaw = P_control.yaw + I_control.yaw + D_control.yaw;
+  (*result).control.roll = P_control.roll + prev_I_control->roll + D_control.roll;
+  (*result).control.pitch = P_control.pitch + prev_I_control->pitch + D_control.pitch;
+  (*result).control.yaw = P_control.yaw + prev_I_control->yaw + D_control.yaw;
 
   (*result).error = error;
+}
+
+/* Daulloop_PID_Calculate
+ * Dual Loop PID Control Calculation Function
+ * Parameter:aimAnlge, prevAngle, currentAngle, dt, currentRate, prev_stabilize_I_controll, prev_rate_I_controll, result
+ * aimAngle(Angle *):set aim angle
+ * prevAngle(Angle *):set previous current angle
+ * currentAngle(Angle *):set current angle
+ * double dt : Time increment
+ * currentRate(SensorResult *) : CurrentRate to Gyro Sensor
+ * prev_stabilize_I_controll(Angle *) : Previous Static Integral Calculated Number for stabilize
+ * prev_rate_I_controll(Angle *) : Previous Static Integral Calculated Number for rate
+ * result(PIDResult *) : Result of PID Calculation
+ */
+void Dualloop_PID_Calculate(Angle *aimAngle, Angle *prevAngle ,Angle *currentAngle, double dt,SensorResult *currentRate, Angle *prev_stabilize_I_control,Angle *prev_rate_I_control, PIDResult* result) {
+  Error error;
+  error.roll = aimAngle->roll - currentAngle->roll;
+  error.pitch = aimAngle->pitch - currentAngle->pitch;
+  error.yaw = aimAngle->yaw - currentAngle->pitch;
+
+  Angle stabilize_P_control;
+  stabilize_P_control.roll = Kp * error.roll;
+  stabilize_P_control.pitch = Kp * error.pitch;
+  stabilize_P_control.yaw = Kp * error.yaw;
+
+  prev_stabilize_I_control->roll += Ki * error.roll * dt;
+  prev_stabilize_I_control->pitch += Ki * error.pitch * dt;
+  prev_stabilize_I_control->yaw += Ki * error.yaw * dt;
+
+  Error rateError;
+  rateError.roll = stabilize_P_control.roll - (currentRate->GyX / GYROXYZ_TO_DEGREES_PER_SEC);
+  rateError.pitch = stabilize_P_control.pitch - (currentRate->GyY / GYROXYZ_TO_DEGREES_PER_SEC);
+  rateError.yaw = stabilize_P_control.yaw - (currentRate->GyZ / GYROXYZ_TO_DEGREES_PER_SEC);
+
+  Angle rate_P_control;
+  rate_P_control.roll = Kp * rateError.roll;
+  rate_P_control.pitch = Kp * rateError.pitch;
+  rate_P_control.yaw = Kp * rateError.yaw;
+
+  prev_rate_I_control->roll += Ki * rateError.roll * dt;
+  prev_rate_I_control->pitch += Ki * rateError.pitch * dt;
+  prev_rate_I_control->yaw += Ki * rateError.yaw * dt;
+
+  result->control.roll = rate_P_control.roll + prev_rate_I_control->roll + prev_stabilize_I_control->roll;
+  result->control.pitch = rate_P_control.pitch + prev_rate_I_control->pitch + prev_stabilize_I_control->pitch;
+  result->control.yaw = rate_P_control.yaw + prev_rate_I_control->yaw + prev_stabilize_I_control->yaw;
+
+  result->error = error;
 }
 
 /* getControllerValue
@@ -287,6 +337,9 @@ Angle prevAngle;
 Angle gyroAngle;
 Angle accelAngle;
 Angle currentAngle;
+Angle prevIcontroll;
+Angle prevStabilizeIcontrol;
+Angle prevRateIcontrol;
 SensorResult dGyro;
 int throttleInput = 0;
 double prevTime = 0;
@@ -303,6 +356,9 @@ void setup() {
   initAngle(&gyroAngle);
   initAngle(&accelAngle);
   initAngle(&currentAngle);
+  initAngle(&prevIcontroll);
+  initAngle(&prevStabilizeIcontrol);
+  initAngle(&prevRateIcontrol);
   initSensor(&dGyro);
 }
 
@@ -334,9 +390,12 @@ void loop() {
    }
    calcFilteredAngle(&accelAngle, &dGyro, &currentAngle, dt);
 
-   //3.PID control calculation
+   //3.PID controll calculation
    PIDResult pidResult;
-   PID_Calculate(&aimAngle, &prevAngle, &currentAngle, dt, &pidResult);
+   //If you want standard PID controll
+   PID_Calculate(&aimAngle, &prevAngle, &currentAngle, dt,&prevIcontroll, &pidResult);
+   //If you want dual loop PID controll
+   Dualloop_PID_Calculate(&aimAngle, &prevAngle, &currentAngle, dt, sensorValue, &prevStabilizeIcontrol, &prevRateIcontrol, &pidResult);
   
    //4.Control to Motor
    MotorControl(&(pidResult.control), (double)throttleInput);

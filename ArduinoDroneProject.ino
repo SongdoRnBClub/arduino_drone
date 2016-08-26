@@ -300,10 +300,6 @@ void MotorControl(Angle* PID_value, double throttle){
     double motorCSpeed = throttle + PID_value->yaw - PID_value->roll - PID_value->pitch;
     double motorDSpeed = throttle - PID_value->yaw + PID_value->roll - PID_value->pitch;
 
-    //Serial.println(motorASpeed);
-    //Serial.println(motorBSpeed);
-    //Serial.println(motorCSpeed);
-    //Serial.println(motorDSpeed);
     analogWrite(MOTOR_A_PIN, constrain((int)motorASpeed , 0, 255));
     analogWrite(MOTOR_B_PIN, constrain((int)motorBSpeed , 0, 255));
     analogWrite(MOTOR_C_PIN, constrain((int)motorCSpeed , 0, 255));

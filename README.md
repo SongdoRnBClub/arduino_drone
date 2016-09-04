@@ -1,80 +1,19 @@
 # 아두이노 드론 프로젝트
-## 개요
-이 프로젝트는 송도고등학교 로봇동아리 (RnB)에서 진행하는 드론프로젝트의 소스코드를 공개하는 곳입니다. 라이센스는 MIT라이센스를 따릅니다.
+## 한국어
+이곳은 송도고등학교 아두이노 드론 프로젝트의 소스를 올려놓은곳입니다.현재 아래와 같은 드론 키트에 맞추어서 제작되어 있습니다.
+추가적으로 개조해서 사용 하실 수 있습니다. 핀번호등에서 조금만 손보시면 바로 사용 하실 수 있을겁니다.
 
-## 진행현황
-### 드론 내 소프트웨어(아두이노)
+이 프로젝트의 모든 코드는 MIT라이센스를 따릅니다. 
 
-현재버전:Alpha v1.0.2
+코드에 대한 자세한 사항은 위키를 참고해주시길 바랍니다.
 
-연혁
+키트 : [http://daduino.co.kr/product/detail.html?product_no=1237&cate_no=78&display_group=1](http://daduino.co.kr/product/detail.html?product_no=1237&cate_no=78&display_group=1)
 
-2016/05/24 Alpha v1.0 릴리즈
+## 日本語
+ここは松都高等学校アルドゥイーノドーロンプロジェクトのソースをアップロードしたどころです。現在下記のようなドーロンキットに最適化して製作されています。追加的に改造して使用できます。ピン番号などで少し修正すればすぐ使用できるはずです。
 
-2016/05/29 Alpha v1.0.0.a 릴리즈(aimAngle, throttle에 대한 초기값 설정코드 추가)
+このプロジェクトのすべてのコードはMITライセンスを従います。
 
-2016/06/30 Alpha v1.0.2 릴리즈(Overflow문제 해결, 안정적인 동작을 위한 코드 추가)
+コードについての詳細はウィキを参考してください。
 
-2016/08/25 Alpha v1.1.0 릴리즈(PID함수의 적분항 수정, 이중PID제어 추가)
-
-### 조종 프로그램(프로세싱)(제작현황:계획중)
-
-### 조종 프로그램(C#, Xamarin)
-
-현재 버전:Alpha v.1.0
-
-연혁
-
-2016/05/29 Alpha v.1.0 릴리즈
-
-링크:[https://github.com/Prokuma/ardino_drone_controller](https://github.com/Prokuma/ardino_drone_controller)
-
-## 프로토콜 규격(Prokuma Drone Control Protocol v1)
-
-명령자뒤에 값을 붙이는 형식으로 진행합니다. 현재 명령자의 종류는
-
-T : 쓰로틀값 조정
-
-R : Roll값 조정
-
-P : Pitch값 조정
-
-Y : Yaw값 조정
-
-명령자는 char형태로, byte로 변환을 한 뒤에, byte로 변환한 조정값을 담아서 byte배열형태로 전송합니다. 예제처럼 써주시면 되겠습니다.
-
-```C
-{(byte)'T', (byte)255, (byte)'R', (byte)10, (byte)'P', (byte)5, (byte)'R',(byte)1}
-```
-
-### 프로토콜 업데이트 계획(Prokuma Drone Control Protocol v2)
-
-구조 : 명령자 소명령자 값
-
-명령자
-
-C : Connection 관련 명령자
-- s : 연결 개시 (값 X)
-- e : 연결 종료 (값 X)
-- k : 연결 유지 (값 X)
-
-S : PID 상수 관련 명령자
-- p : P제어 상수 설정
-- i : I제어 상수 설정
-- d : D제어 상수 설정
-
-I : 정보 관련 명령자
-- g : 관련 정보 얻어오기
-- t : Throttle값 설정
-- r : Roll값 설정
-- p : Pitch값 설정
-- y : Yaw값 설정
-
-연결 유지는 5000ms동안에 관련 정보가 발견되지 않으면 연결이 끊긴것을 알고 자동적으로 종료.
-
-## 아직 남아있는 개선사항
-드론 내 소프트웨어
-
-1.PID제어 -> 이중 PID제어
-
-2.PID제어 상수 튜닝기능
+キット : [http://daduino.co.kr/product/detail.html?product_no=1237&cate_no=78&display_group=1](http://daduino.co.kr/product/detail.html?product_no=1237&cate_no=78&display_group=1)
